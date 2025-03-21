@@ -32,6 +32,8 @@ body {
   margin: 10px 15px;
   font-size: 10pt;
   font-family: monospace;
+  background-color: black;
+  color: #f97316;
 }
 
 .sticky {
@@ -42,7 +44,7 @@ body {
   padding-top: 10px;
   width: 100%;
   display: flex;
-  background-color: white;
+  background-color: black;
   opacity: 1;
   z-index: 4;
 }
@@ -91,6 +93,7 @@ p {
   width: 100%;
   clear: both;
   max-width: calc(100vw - 80px);
+  background-color: black;
 }
 
 input[type=button], input[type=reset] {
@@ -108,7 +111,7 @@ input[type=button], input[type=reset] {
 }
 
 #controls > * {
-  background-color: white;
+  background-color: black;
   opacity: 1;
   z-index: 2;
 }
@@ -391,6 +394,8 @@ label[for="displayMode-compact"] {
 }
 
 #creditsText {
+  background-color: black;
+  color: #ffa94d;
   width: calc(100vw - 80px);
 }
 
