@@ -74,23 +74,23 @@ $(document).ready(function () {
     backslash: 46 * universalFrameSize,
     halfslash: 50 * universalFrameSize,
   };
-  
+
   const animationFrameCounts = {
-	spellcast: 7,
-	thrust: 8,
-	walk: 9,
-	slash: 6,
-	shoot: 13,
-	hurt: 6,
-	climb: 6,
-	idle: 2,
-	jump: 5,
-	sit: 3,
-	emote: 3,
-	run: 8,
-	combat_idle: 2,
-	backslash: 13,
-	halfslash: 7
+    spellcast: 7,
+    thrust: 8,
+    walk: 9,
+    slash: 6,
+    shoot: 13,
+    hurt: 6,
+    climb: 6,
+    idle: 2,
+    jump: 5,
+    sit: 3,
+    emote: 3,
+    run: 8,
+    combat_idle: 2,
+    backslash: 13,
+    halfslash: 7,
   };
 
   const sexes = ["male", "female", "teen", "child", "muscular", "pregnant"];
@@ -238,11 +238,33 @@ $(document).ready(function () {
   });
 
   $("#saveAsPNG").click(function () {
-    renameImageDownload(
-      this,
-      canvas,
-      "Download" + Math.floor(Math.random() * 100000) + ".png"
+    // Get the canvas data
+    const dataURL = canvas.toDataURL("image/png");
+    const filename = "Download" + Math.floor(Math.random() * 100000) + ".png";
+
+    // Send the data to parent window
+    window.parent.postMessage(
+      {
+        type: "spriteDownload",
+        data: {
+          dataURL: dataURL,
+          filename: filename,
+          metadata: {
+            bodyType: getBodyTypeName(),
+            timestamp: new Date().toISOString(),
+            itemsUsed: itemsToDraw.map((item) => ({
+              name: item.name,
+              variant: item.variant,
+              fileName: item.fileName,
+            })),
+          },
+        },
+      },
+      "*"
     );
+
+    // Still allow normal download in iframe
+    renameImageDownload(this, canvas, filename);
     return true;
   });
 
@@ -455,196 +477,231 @@ $(document).ready(function () {
     }
     $("#frame-cycle").text(animationItems.join("-"));
   });
-  
-$(".exportSplitAnimations").click(async function() {
-  try {
-    const zip = new JSZip();
-    const bodyType = getBodyTypeName();
-    const timestamp = new Date().toISOString().replace(/[:\.]/g, '-').substring(0, 19);
 
-    // Create folders in zip
-    const standardFolder = zip.folder("standard");
-    const customFolder = zip.folder("custom");
-    const creditsFolder = zip.folder("credits");
-    
-    if (!standardFolder || !customFolder || !creditsFolder) {
-      throw new Error("Failed to create folder structure in zip file");
-    }
+  $(".exportSplitAnimations").click(async function () {
+    try {
+      const zip = new JSZip();
+      const bodyType = getBodyTypeName();
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:\.]/g, "-")
+        .substring(0, 19);
 
-    // Helper to convert canvas to blob
-    const canvasToBlob = (canvas) => {
-      return new Promise((resolve, reject) => {
-        try {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error("Failed to create blob from canvas"));
-            }
-          }, 'image/png');
-        } catch (err) {
-          reject(new Error(`Canvas to Blob conversion failed: ${err.message}`));
-        }
-      });
-    };
+      // Create folders in zip
+      const standardFolder = zip.folder("standard");
+      const customFolder = zip.folder("custom");
+      const creditsFolder = zip.folder("credits");
 
-    // Export standard animations
-    const exportedStandard = [];
-    const failedStandard = [];
-    
-    for (const [name, startY] of Object.entries(base_animations)) {
-      try {
-        const rows = name === 'hurt' || name === 'climb' ? 1 : 4;
-        const frames = animationFrameCounts[name];
-        
-        if (hasContentInRegion(ctx, 0, startY, frames * universalFrameSize, rows * universalFrameSize)) {
-          const animCanvas = document.createElement('canvas');
-          animCanvas.width = frames * universalFrameSize;
-          animCanvas.height = rows * universalFrameSize;
-          const animCtx = animCanvas.getContext('2d');
-          
-          if (!animCtx) {
-            throw new Error("Failed to get canvas context");
-          }
-          
-          animCtx.drawImage(canvas, 
-            0, startY,
-            frames * universalFrameSize, rows * universalFrameSize,
-            0, 0,
-            frames * universalFrameSize, rows * universalFrameSize
-          );
-
-          const blob = await canvasToBlob(animCanvas);
-          await standardFolder.file(`${name}.png`, blob);
-          exportedStandard.push(name);
-        }
-      } catch (err) {
-        console.error(`Failed to export standard animation ${name}:`, err);
-        failedStandard.push(name);
+      if (!standardFolder || !customFolder || !creditsFolder) {
+        throw new Error("Failed to create folder structure in zip file");
       }
-    }
 
-    // Handle custom animations
-    const exportedCustom = [];
-    const failedCustom = [];
-    let currentY = universalSheetHeight;
-    
-    for (const animName of addedCustomAnimations) {
-      try {
-        const anim = customAnimations[animName];
-        if (!anim) {
-          throw new Error("Animation definition not found");
-        }
-
-        const width = anim.frameSize * anim.frames[0].length;
-        const height = anim.frameSize * anim.frames.length;
-
-        if (hasContentInRegion(ctx, 0, currentY, width, height)) {
-          const animCanvas = document.createElement('canvas'); 
-          animCanvas.width = width;
-          animCanvas.height = height;
-          const animCtx = animCanvas.getContext('2d');
-          
-          if (!animCtx) {
-            throw new Error("Failed to get canvas context");
+      // Helper to convert canvas to blob
+      const canvasToBlob = (canvas) => {
+        return new Promise((resolve, reject) => {
+          try {
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error("Failed to create blob from canvas"));
+              }
+            }, "image/png");
+          } catch (err) {
+            reject(
+              new Error(`Canvas to Blob conversion failed: ${err.message}`)
+            );
           }
-
-          animCtx.drawImage(canvas,
-            0, currentY, width, height,
-            0, 0, width, height
-          );
-
-          const blob = await canvasToBlob(animCanvas);
-          await customFolder.file(`${animName}.png`, blob);
-          exportedCustom.push(animName);
-        }
-        currentY += height;
-      } catch (err) {
-        console.error(`Failed to export custom animation ${animName}:`, err);
-        failedCustom.push(animName);
-      }
-    }
-
-    // Add JSON export
-    try {
-      const spritesheet = Object.assign({}, itemsMeta);
-      spritesheet["layers"] = itemsToDraw;
-      await zip.file("character.json", JSON.stringify(spritesheet, null, 2));
-    } catch (err) {
-      throw new Error(`Failed to add character.json: ${err.message}`);
-    }
-
-    // Add credits in multiple formats
-    try {
-      await creditsFolder.file("credits.txt", sheetCreditsToTxt());
-      await creditsFolder.file("credits.csv", sheetCreditsToCSV());
-    } catch (err) {
-      throw new Error(`Failed to add credits files: ${err.message}`);
-    }
-
-    // Add metadata about the export
-    try {
-      const metadata = {
-        exportTimestamp: timestamp,
-        bodyType: bodyType,
-        standardAnimations: {
-          exported: exportedStandard,
-          failed: failedStandard
-        },
-        customAnimations: {
-          exported: exportedCustom,
-          failed: failedCustom
-        },
-        frameSize: universalFrameSize,
-        frameCounts: animationFrameCounts
+        });
       };
-      await creditsFolder.file("metadata.json", JSON.stringify(metadata, null, 2));
-    } catch (err) {
-      throw new Error(`Failed to add metadata.json: ${err.message}`);
-    }
 
-    // Generate and download zip
-    try {
-      const content = await zip.generateAsync({
-        type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 9 }
-      });
+      // Export standard animations
+      const exportedStandard = [];
+      const failedStandard = [];
 
-      const link = document.createElement('a');
-      link.download = `lpc_${bodyType}_animations_${timestamp}.zip`;
-      link.href = URL.createObjectURL(content);
-      link.click();
-      URL.revokeObjectURL(link.href);
+      for (const [name, startY] of Object.entries(base_animations)) {
+        try {
+          const rows = name === "hurt" || name === "climb" ? 1 : 4;
+          const frames = animationFrameCounts[name];
 
-      // Show success message with any failures
-      if (failedStandard.length > 0 || failedCustom.length > 0) {
-        const failureMessage = [];
-        if (failedStandard.length > 0) {
-          failureMessage.push(`Failed to export standard animations: ${failedStandard.join(', ')}`);
+          if (
+            hasContentInRegion(
+              ctx,
+              0,
+              startY,
+              frames * universalFrameSize,
+              rows * universalFrameSize
+            )
+          ) {
+            const animCanvas = document.createElement("canvas");
+            animCanvas.width = frames * universalFrameSize;
+            animCanvas.height = rows * universalFrameSize;
+            const animCtx = animCanvas.getContext("2d");
+
+            if (!animCtx) {
+              throw new Error("Failed to get canvas context");
+            }
+
+            animCtx.drawImage(
+              canvas,
+              0,
+              startY,
+              frames * universalFrameSize,
+              rows * universalFrameSize,
+              0,
+              0,
+              frames * universalFrameSize,
+              rows * universalFrameSize
+            );
+
+            const blob = await canvasToBlob(animCanvas);
+            await standardFolder.file(`${name}.png`, blob);
+            exportedStandard.push(name);
+          }
+        } catch (err) {
+          console.error(`Failed to export standard animation ${name}:`, err);
+          failedStandard.push(name);
         }
-        if (failedCustom.length > 0) {
-          failureMessage.push(`Failed to export custom animations: ${failedCustom.join(', ')}`);
-        }
-        alert(`Export completed with some issues:\n${failureMessage.join('\n')}`);
       }
-    } catch (err) {
-      throw new Error(`Failed to generate zip file: ${err.message}`);
-    }
 
-  } catch (error) {
-    console.error('Export error:', error);
-    alert(`Export failed: ${error.message}\nCheck console for details.`);
-  }
-});
+      // Handle custom animations
+      const exportedCustom = [];
+      const failedCustom = [];
+      let currentY = universalSheetHeight;
+
+      for (const animName of addedCustomAnimations) {
+        try {
+          const anim = customAnimations[animName];
+          if (!anim) {
+            throw new Error("Animation definition not found");
+          }
+
+          const width = anim.frameSize * anim.frames[0].length;
+          const height = anim.frameSize * anim.frames.length;
+
+          if (hasContentInRegion(ctx, 0, currentY, width, height)) {
+            const animCanvas = document.createElement("canvas");
+            animCanvas.width = width;
+            animCanvas.height = height;
+            const animCtx = animCanvas.getContext("2d");
+
+            if (!animCtx) {
+              throw new Error("Failed to get canvas context");
+            }
+
+            animCtx.drawImage(
+              canvas,
+              0,
+              currentY,
+              width,
+              height,
+              0,
+              0,
+              width,
+              height
+            );
+
+            const blob = await canvasToBlob(animCanvas);
+            await customFolder.file(`${animName}.png`, blob);
+            exportedCustom.push(animName);
+          }
+          currentY += height;
+        } catch (err) {
+          console.error(`Failed to export custom animation ${animName}:`, err);
+          failedCustom.push(animName);
+        }
+      }
+
+      // Add JSON export
+      try {
+        const spritesheet = Object.assign({}, itemsMeta);
+        spritesheet["layers"] = itemsToDraw;
+        await zip.file("character.json", JSON.stringify(spritesheet, null, 2));
+      } catch (err) {
+        throw new Error(`Failed to add character.json: ${err.message}`);
+      }
+
+      // Add credits in multiple formats
+      try {
+        await creditsFolder.file("credits.txt", sheetCreditsToTxt());
+        await creditsFolder.file("credits.csv", sheetCreditsToCSV());
+      } catch (err) {
+        throw new Error(`Failed to add credits files: ${err.message}`);
+      }
+
+      // Add metadata about the export
+      try {
+        const metadata = {
+          exportTimestamp: timestamp,
+          bodyType: bodyType,
+          standardAnimations: {
+            exported: exportedStandard,
+            failed: failedStandard,
+          },
+          customAnimations: {
+            exported: exportedCustom,
+            failed: failedCustom,
+          },
+          frameSize: universalFrameSize,
+          frameCounts: animationFrameCounts,
+        };
+        await creditsFolder.file(
+          "metadata.json",
+          JSON.stringify(metadata, null, 2)
+        );
+      } catch (err) {
+        throw new Error(`Failed to add metadata.json: ${err.message}`);
+      }
+
+      // Generate and download zip
+      try {
+        const content = await zip.generateAsync({
+          type: "blob",
+          compression: "DEFLATE",
+          compressionOptions: { level: 9 },
+        });
+
+        const link = document.createElement("a");
+        link.download = `lpc_${bodyType}_animations_${timestamp}.zip`;
+        link.href = URL.createObjectURL(content);
+        link.click();
+        URL.revokeObjectURL(link.href);
+
+        // Show success message with any failures
+        if (failedStandard.length > 0 || failedCustom.length > 0) {
+          const failureMessage = [];
+          if (failedStandard.length > 0) {
+            failureMessage.push(
+              `Failed to export standard animations: ${failedStandard.join(
+                ", "
+              )}`
+            );
+          }
+          if (failedCustom.length > 0) {
+            failureMessage.push(
+              `Failed to export custom animations: ${failedCustom.join(", ")}`
+            );
+          }
+          alert(
+            `Export completed with some issues:\n${failureMessage.join("\n")}`
+          );
+        }
+      } catch (err) {
+        throw new Error(`Failed to generate zip file: ${err.message}`);
+      }
+    } catch (error) {
+      console.error("Export error:", error);
+      alert(`Export failed: ${error.message}\nCheck console for details.`);
+    }
+  });
 
   // Helper function to check if a region has non-transparent pixels
   function hasContentInRegion(ctx, x, y, width, height) {
     try {
       const imageData = ctx.getImageData(x, y, width, height);
-      return imageData.data.some(pixel => pixel !== 0);
+      return imageData.data.some((pixel) => pixel !== 0);
     } catch (e) {
-      console.warn('Error checking region content:', e);
+      console.warn("Error checking region content:", e);
       return false;
     }
   }
@@ -806,7 +863,9 @@ $(".exportSplitAnimations").click(async function() {
   }
 
   function whichPropChecked(ids, key, vals) {
-    const regExps = vals.map(val => new RegExp(String.raw`^${key}-${val}`, "i"));
+    const regExps = vals.map(
+      (val) => new RegExp(String.raw`^${key}-${val}`, "i")
+    );
     const els = findIdsByRegExp(ids, regExps);
     for (let i = 0; i < vals.length; ++i) {
       if (els[i] === true) {
@@ -882,10 +941,18 @@ $(".exportSplitAnimations").click(async function() {
           const parentName = $this.attr(`name`);
           const name = $this.attr(`parentName`);
           const variant = $this.attr(`variant`);
-          const licenses = $this.data(`${bodyTypeKey}_licenses`) || $liVariant.data(`${bodyTypeName}_licenses`);
-          const authors = $this.data(`${bodyTypeKey}_authors`) || $liVariant.data(`${bodyTypeName}_authors`);
-          const urls = $this.data(`${bodyTypeKey}_urls`) || $liVariant.data(`${bodyTypeName}_urls`);
-          const notes = $this.data(`${bodyTypeKey}_notes`) || $liVariant.data(`${bodyTypeName}_notes`);
+          const licenses =
+            $this.data(`${bodyTypeKey}_licenses`) ||
+            $liVariant.data(`${bodyTypeName}_licenses`);
+          const authors =
+            $this.data(`${bodyTypeKey}_authors`) ||
+            $liVariant.data(`${bodyTypeName}_authors`);
+          const urls =
+            $this.data(`${bodyTypeKey}_urls`) ||
+            $liVariant.data(`${bodyTypeName}_urls`);
+          const notes =
+            $this.data(`${bodyTypeKey}_notes`) ||
+            $liVariant.data(`${bodyTypeName}_notes`);
 
           if (fileName !== "") {
             const supportedAnimations = $this
@@ -929,7 +996,7 @@ $(".exportSplitAnimations").click(async function() {
 
   function makeDynamicSubstitutions(fileName, $el, jdx) {
     const mungedReplacements = $el.data(`layer_${jdx}_replace`);
-    if (mungedReplacements && fileName.includes('${')) {
+    if (mungedReplacements && fileName.includes("${")) {
       const replacements = mungedReplacements.replace(/'/g, '"');
       let parsedReplacements = null;
       try {
@@ -939,7 +1006,7 @@ $(".exportSplitAnimations").click(async function() {
       }
       if (parsedReplacements) {
         const keys = Object.keys(parsedReplacements);
-        const entries = keys.map(key => {
+        const entries = keys.map((key) => {
           const id = `${key}-${jHash.val(key)}`;
           return [key, parsedReplacements[key][getParent(id)]];
         });
@@ -1146,9 +1213,7 @@ $(".exportSplitAnimations").click(async function() {
     const selectedTags = new Set();
     $("#chooser input[type=radio]:checked").each(function () {
       const tags = $(this).data("tags");
-      tags && tags.split(",").forEach(tag =>
-        selectedTags.add(tag)
-      );
+      tags && tags.split(",").forEach((tag) => selectedTags.add(tag));
     });
 
     let hasUnsupported = false;
@@ -1156,7 +1221,7 @@ $(".exportSplitAnimations").click(async function() {
 
     $("#chooser li[data-required]").each(function (index) {
       let hasExcluded = false;
-      let excludedText = '';
+      let excludedText = "";
 
       // Toggle Required Body Type
       const $this = $(this);
@@ -1171,14 +1236,12 @@ $(".exportSplitAnimations").click(async function() {
 
       if (display) {
         // Toggle based on tags/required_tags
-        const $firstButton = $this
-        .find("input[type=radio][parentname]")
-        .eq(0);
+        const $firstButton = $this.find("input[type=radio][parentname]").eq(0);
         if ($firstButton.length > 0) {
           const requiredTags = $this
             .find("input[type=radio]")
             .data("required_tags");
-          requiredTags?.split(",")?.forEach(tag => {
+          requiredTags?.split(",")?.forEach((tag) => {
             if (tag && !selectedTags.has(tag)) {
               display = false;
             }
@@ -1188,16 +1251,15 @@ $(".exportSplitAnimations").click(async function() {
 
       if (display) {
         // Toggle based on tags/excluded_tags
-        const $firstButton = $this
-          .find("input[type=radio][parentname]")
-          .eq(0);
+        const $firstButton = $this.find("input[type=radio][parentname]").eq(0);
         if ($firstButton.length > 0) {
-          const excludedTags = $firstButton
-            .data("excluded_tags");
-          excludedTags?.split(",")?.forEach(tag => {
+          const excludedTags = $firstButton.data("excluded_tags");
+          excludedTags?.split(",")?.forEach((tag) => {
             if (tag && selectedTags.has(tag)) {
               hasExcluded = true;
-              excludedText = `${$firstButton.attr("name")} is not allowed with ${tag}`;
+              excludedText = `${$firstButton.attr(
+                "name"
+              )} is not allowed with ${tag}`;
             }
           });
         }
@@ -1239,8 +1301,8 @@ $(".exportSplitAnimations").click(async function() {
             if (!requiredAnimations.includes(selectedAnim)) {
               display = false;
               if (
-                $this.find("input[type=radio]:checked:not([id*=none])")
-                  .length > 0
+                $this.find("input[type=radio]:checked:not([id*=none])").length >
+                0
               ) {
                 hasUnsupported = true;
               }
@@ -1259,11 +1321,19 @@ $(".exportSplitAnimations").click(async function() {
       }
 
       if (hasExcluded) {
-        $this.find('.excluded-hide').each(function() { $(this).hide().attr('hidden', 'hidden'); });
-        $this.find('.excluded-text').each(function() { $(this).show().attr('hidden', null).text(excludedText); });
+        $this.find(".excluded-hide").each(function () {
+          $(this).hide().attr("hidden", "hidden");
+        });
+        $this.find(".excluded-text").each(function () {
+          $(this).show().attr("hidden", null).text(excludedText);
+        });
       } else {
-        $this.find('.excluded-hide').each(function() { $(this).show().attr('hidden', null); });
-        $this.find('.excluded-text').each(function() { $(this).hide().attr('hidden', 'hidden').text(''); });
+        $this.find(".excluded-hide").each(function () {
+          $(this).show().attr("hidden", null);
+        });
+        $this.find(".excluded-text").each(function () {
+          $(this).hide().attr("hidden", "hidden").text("");
+        });
       }
     });
 
@@ -1292,7 +1362,7 @@ $(".exportSplitAnimations").click(async function() {
 
       // Toggle based on tags/required_tags
       const requiredTags = $this.data("required_tags");
-      requiredTags?.split(",")?.forEach(tag => {
+      requiredTags?.split(",")?.forEach((tag) => {
         if (tag && !selectedTags.has(tag)) {
           display = false;
         }
@@ -1300,7 +1370,7 @@ $(".exportSplitAnimations").click(async function() {
 
       // Toggle based on tags/excluded_tags
       const excludedTags = $this.data("excluded_tags");
-      excludedTags?.split(",")?.forEach(tag => {
+      excludedTags?.split(",")?.forEach((tag) => {
         if (tag && selectedTags.has(tag)) {
           display = false;
         }
@@ -1345,7 +1415,7 @@ $(".exportSplitAnimations").click(async function() {
         $(this).attr("checked") || params[initial] === words[1]
       );
       const $parent = $(this).closest("li.variant-list");
-      if ($parent.attr('open')) {
+      if ($parent.attr("open")) {
         drawPreviews.call($parent.get(0));
       }
     });
